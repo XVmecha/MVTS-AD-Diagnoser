@@ -101,11 +101,11 @@ Structural grouping worth keeping in mind: classes 1–3, 5, 6 *add or modulate 
 
 Non-fault event types, for completeness: **induced deviations** (labeled as effects in the key, with parent and lag) and **regime switches** (legal mode changes that must NOT be claimed as faults).
 
-**[OPEN]** Whether multi-root scenes may mix fault classes (drift on s4 AND unrelated spike on s2). Recommended default: yes. It is free to generate and it is the realistic alarm-flood case; awaiting confirmation.
+**[RESOLVED 2026-08-24]** v1 scenes contain **exactly one root** (or none, for clean scenes). Concurrent roots, and the question of whether they may mix fault classes, are staged: they enter as the first difficulty escalation at the week-2 gate (§12) if single-root difficulty fails to challenge the frontier baseline. This supersedes the earlier "≤2 roots in training" dial. Consequence: the claims schema keeps a scalar `caused_by`, and overlapping propagation cascades need no v1 handling.
 
 ### 4.3 Difficulty as a stratified parameter grid [LOCKED]
 
-Difficulty dials: number of simultaneous roots (≤2 in training), propagation depth (≤2), SNR, onset proximity (how close together events start; near-simultaneous onsets are what break "first onset = root" heuristics), regime-switch presence.
+Difficulty dials in v1: propagation depth (≤2), SNR, regime-switch presence, and onset proximity of the fault to the regime switch (a fault starting near a legal mode change is the false-attribution trap available in single-root scenes). Number of simultaneous roots is fixed at 1 in v1 (ruling 2026-08-24, see §4.2); concurrent roots return as a gate-time escalation, at which point multi-event onset proximity (near-simultaneous onsets breaking "first onset = root" heuristics) returns with them.
 
 **Stratified** generation means every grid cell is filled deliberately (e.g., ~50 eval scenes per cell), never left to random sampling. Two reasons: (1) random sampling concentrates scenes in the comfortable middle, so the model never trains on hard corners; (2) the week-2 frontier gate (§12) needs enough hard-cell scenes to locate where the baseline breaks and report the failure curve. The curve ("frontier accuracy: high on easy cells, degraded on hard cells") is itself a headline figure.
 
@@ -118,7 +118,7 @@ Three datasets sample the same generator: SFT (~2–3k scenes), GRPO prompts (~2
 - **Wiring instances are exclusive per split.** Thousands of unique wirings, fresh per scene; wiring ID ranges assigned to exactly one dataset. No graph shape ever appears in two splits. Rationale: if a wiring occurs in both train and eval, eval becomes a memory test. The model "generalizes" to causal structure it has memorized, silently re-breaking the graph-in-context principle (§5). Analogue: split by patient, not by scan.
 - **Wiring diversity is guaranteed within every split** (thousands of instances each, same distribution of graph statistics). Kinds shared, individuals disjoint: new problems of the same type, never the homework with numbers changed.
 - **Difficulty is stratified within every split.** Difficulty is a balanced factor; topology is a held-out factor. Opposite treatments, both deliberate.
-- **One extrapolation cell in eval [LOCKED]:** 3 simultaneous roots (training max is 2), reported as its own labeled row. This is the "new machine / harder day" generalization claim made falsifiable inside the synthetic world. Chosen over depth-3 chains because concurrent-fault disentangling is the operator's real pain (alarm floods) and requires no checker changes.
+- **One extrapolation cell in eval [AMENDED 2026-08-24]:** the original cell (3 simultaneous roots vs. a training max of 2) is suspended by the single-root ruling (§4.2). Candidate replacement: depth-3 propagation chains (training max is depth 2), which keeps the "new machine / harder day" claim falsifiable with no multi-root machinery. Final choice is deferred to the week-2 gate, where difficulty is calibrated anyway.
 - **TEP is sealed [LOCKED]:** run once, at the end, after the generator is frozen. No generator iteration against TEP scores (that would be test-set tuning by the back door). Knowing fault *classes* exist in chemistry (drifts, stiction) is legitimate domain knowledge; fitting generator *parameters* to TEP is leakage. SMD (and optionally SWaT, which the author knows from thesis work) serve as development-time transfer checks that we ARE allowed to look at.
 
 ### 4.5 Volume
@@ -291,6 +291,6 @@ Everything Apache-2.0 (code, data, adapters). Artifacts: `mvtsad-bench` (generat
 
 ## Appendix: open questions
 
-1. Mixed fault classes in multi-root scenes (recommended: allow). See §4.2.
+1. ~~Mixed fault classes in multi-root scenes~~ Resolved 2026-08-24: v1 is single-root only; multi-root (mixed or not) is staged behind the week-2 gate. See §4.2.
 2. Extractor sensitivity settings ("representative of deployed alarm behavior"). See §6.
 3. GRPO hyperparameters beyond G=4 default (beta sweep), decided at stage time. See §9.
