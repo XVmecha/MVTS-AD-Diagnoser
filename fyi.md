@@ -3,6 +3,36 @@
 Newest entries first. Design rationale lives in `docs/design.md`; this log records
 implementation decisions, workarounds, and operational steps taken along the way.
 
+## 2026-08-24 — Claim checker: one matching pass, reward and strict eval
+
+**What.** `mvtsad/check/checker.py` (260 lines): `parse_diagnosis` (extracts the last
+valid claims JSON from rationale-first output; parse failure = hard gate, reward 0),
+one-to-one greedy claim-to-event matching (channel + window IoU >= 0.5), graded GRPO
+reward and strict binary verdicts computed from the same match results, recoverable-only
+recall with extractor ceiling reported separately, grounding validation of cited evidence
+ids, grounded-but-wrong vs hallucinated split. 12 tests in `tests/test_checker.py`
+including an integration test: a gold diagnosis rendered from a generated answer key
+scores strict accuracy 1.0.
+
+**Why.** The checker is the artifact everything else is judged against (eval harness,
+GRPO reward, integrity monitor), and it depends only on `mvtsad/schemas.py`, so building
+it before the extractor keeps the dependency order clean.
+
+**Alternatives.** Matching could gate on fault class as well as channel + window.
+Rejected: design section 8 lists class among the scored tolerances, not the matching
+gates, and gating on class would zero out partial credit for
+right-channel-right-window-wrong-class answers, exactly the contrast GRPO needs.
+
+**Gotcha.** Three interpretation decisions not fully pinned by the design doc, flag for
+review. (1) Strict correctness requires the claim's citations to be nonempty and all
+valid (the "every field passes" reading applied to the evidence field); frontier
+baselines will score lower under this than under a claims-only reading. (2) The reward's
+hallucination penalty applies per UNMATCHED claim (section 9 formula), while the
+hallucinated/grounded-but-wrong split (section 8) is reported but not separately
+weighted. (3) The diagnosis's `clean` list is not scored in v1: clean-scene false alarms
+are already captured by unmatched-claim penalties, and no design metric scores the list
+itself. Attribution credit is 0.5 for the correct edge + 0.5 graded by lag error.
+
 ## 2026-08-24 — Scene generator, fault injection, twin-run answer keys
 
 **What.** Implemented `mvtsad/schemas.py` (AnswerKey, EvidenceBundle, Diagnosis contracts),
