@@ -3,6 +3,40 @@
 Newest entries first. Design rationale lives in `docs/design.md`; this log records
 implementation decisions, workarounds, and operational steps taken along the way.
 
+## 2026-08-31 — Extractor: four statistical detectors, empirically tuned defaults
+
+**What.** `mvtsad/extract/extractor.py`: threshold crossings (sustained z > 3.5 or
+single-step spike z > 3.5), change-points (windowed mean shift, half-window 25),
+slopes (rolling OLS rise over 80 steps), and lagged cross-correlation shifts (coupling
+baseline from the leading 15% of the scene; flags both coupling loss and new couplings
+with the lag in the evidence id). Calibration location/scale are median/MAD of the
+leading segment, mimicking limits set on historical normal data. 9 tests in
+`tests/test_extractor.py` (40 total). ~200 ms/scene including generation.
+TOTO deferred to an optional `mvtsad[toto]` extra per the 2026-08-31 decision;
+the week-2 gate does not wait on it.
+
+**Why.** Third critical-path item; the diagnoser reads only this output.
+
+**Alternatives.** Two flood-control strategies were tried against measured flag volume
+(initial defaults produced 58 items per CLEAN scene, which blows the prompt budget).
+Full-scene robust calibration reduced volume but a level shift persisting to scene end
+contaminates even median/MAD enough to hide itself (recoverability dropped to 0.67).
+Adopted instead: leading-segment calibration (best recoverability) plus alarm
+rationalization, i.e. deterministic per-channel/per-pair severity caps (threshold 2,
+changepoint 3, slope 2, xcorr 2) and run merging with gap 20. Result: ~30 items per
+clean scene, ~27 per faulted scene.
+
+**Gotcha.** Three things to remember. (1) Root recoverability at the frozen defaults,
+measured on 6-8 scenes per cell: 1.0 drift/level_shift/oscillation (high SNR), ~0.6-0.8
+stuck_at/variance_change/correlation_break, 0.62 spike high SNR, ~0.1 spike low SNR.
+Low-SNR spikes (1-2 noise-sigma single steps) are genuinely invisible; that is the
+extractor ceiling by design, excluded from recall denominators. (2) Unit mismatch:
+key magnitude_z is in NOISE-sigma units, evidence severity is in calibration-sigma
+units (noise + wander + coupling), systematically smaller. Revisit at gold-rendering
+time; magnitude claims may need the checker's rtol reconsidered. (3) Sensitivity
+defaults are provisional; the sanctioned protocol is tuning on the dev split only,
+never against eval scores.
+
 ## 2026-08-24 — Claim checker: one matching pass, reward and strict eval
 
 **What.** `mvtsad/check/checker.py` (260 lines): `parse_diagnosis` (extracts the last
