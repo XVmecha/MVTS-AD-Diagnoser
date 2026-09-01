@@ -115,7 +115,7 @@ def _events(key: AnswerKey) -> list[tuple[str, RootEvent | InducedEvent]]:
     return [("root", e) for e in key.roots] + [("induced", e) for e in key.induced]
 
 
-def _recoverable(event: RootEvent | InducedEvent, evidence: EvidenceBundle) -> bool:
+def is_recoverable(event: RootEvent | InducedEvent, evidence: EvidenceBundle) -> bool:
     return any(
         event.channel in item.channels and _overlaps(item.window, event.window)
         for item in evidence.items
@@ -144,7 +144,7 @@ def check_diagnosis(
         return CheckReport(parsed=False, reward=0.0)
 
     events = _events(key)
-    recoverable = [_recoverable(e, evidence) for _, e in events]
+    recoverable = [is_recoverable(e, evidence) for _, e in events]
     claims = diagnosis.claims
 
     # One-to-one greedy matching by descending IoU.

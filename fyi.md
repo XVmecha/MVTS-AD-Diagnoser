@@ -3,6 +3,30 @@
 Newest entries first. Design rationale lives in `docs/design.md`; this log records
 implementation decisions, workarounds, and operational steps taken along the way.
 
+## 2026-09-01 — Dataset assembly and gold rendering
+
+**What.** `mvtsad/dataset.py`: 27-cell grid (SNR x depth x regime {none, switch,
+switch_near}), fault class balanced within cells by rotation, exclusive wiring-id
+ranges (sft 10k+, grpo 20k+ reserved, eval 30k+, dev 40k+), splits dev=202 /
+sft=2498 (20% clean) / eval=1000. Scenes stored as JSONL (key + frozen evidence)
+plus a manifest with recoverability stats; signals not stored (regenerable
+deterministically; TOTO regenerates them later). `mvtsad/render.py`: compact
+evidence serialization and template-rendered gold completions (rationale first,
+claims JSON after; shuffled claim order, 3 field orderings, 3 rationale variants).
+Build: `python -m mvtsad.dataset dev sft eval`. 7 tests (47 total).
+
+**Why.** Last prerequisite before the week-2 gate.
+
+**Alternatives.** Storing raw signals per split (~650 MB) was rejected; determinism
+makes them free to regenerate and the JSONL stays tens of MB.
+
+**Gotcha.** Two decisions not explicit in design.md. (1) GOLD CLAIMS COVER RECOVERABLE
+EVENTS ONLY: claiming an event with zero evidence would train hallucination; the
+gold clean list correspondingly includes channels whose faults left no evidence.
+(2) The gold-vs-checker loop is closed by test: render_gold output parsed by
+parse_diagnosis must score strict 1.0 / recall 1.0 / grounding 1.0. Any future
+checker semantics change that breaks gold rendering fails tests immediately.
+
 ## 2026-08-31 — Extractor: four statistical detectors, empirically tuned defaults
 
 **What.** `mvtsad/extract/extractor.py`: threshold crossings (sustained z > 3.5 or
