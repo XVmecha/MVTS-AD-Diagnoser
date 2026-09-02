@@ -12,6 +12,12 @@ weights). Frozen at commit time, before any week-2 results were produced.
 Used verbatim for both baseline rows; the few-shot row additionally receives
 worked examples from the dev split as prior conversation turns.
 
+Amendment v2 (2026-09-02, before any eval scene was run): dev-split smoke
+testing showed the model copying the half-open interval notation "[start,
+end)" into JSON arrays, producing invalid JSON on every response. Added one
+sentence requiring windows to be plain two-integer JSON arrays. No other
+change.
+
 The system prompt is everything between the PROMPT markers.
 
 <!--PROMPT-START-->
@@ -45,7 +51,7 @@ Claim objects:
 - Induced effect: {"channel": int, "window": [start, end], "class": "induced", "caused_by": <parent channel int>, "lag": <timesteps int>, "evidence": ["<id>", ...]}
 
 Rules:
-- window is [start, end) in timesteps and should cover the event as observed.
+- window is [start, end) in timesteps and should cover the event as observed. In the JSON, write it as a plain two-integer array, e.g. "window": [99, 790] — never put ")" or "(" inside JSON.
 - magnitude_z is the fault magnitude in per-channel sigma units; null where not meaningful (e.g. stuck_at, correlation_break).
 - Every claim must cite evidence ids that exist in the bundle and pertain to the claimed channel and window.
 - Causal direction: a parent's deviation precedes its child's; xcorr lags and onset ordering tell you which channel drives which. caused_by must name the direct parent, lag the propagation delay in timesteps.
