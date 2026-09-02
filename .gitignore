@@ -10,3 +10,5 @@ data/
 *.safetensors
 adapters/
 .DS_Store
+.env
+runs/
