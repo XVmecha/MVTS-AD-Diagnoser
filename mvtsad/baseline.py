@@ -32,7 +32,6 @@ from mvtsad.schemas import EvidenceBundle
 API_URL = "https://api.mistral.ai/v1/chat/completions"
 MODEL = "mistral-large-latest"
 PROMPT_PATH = Path("prompts/baseline_system.md")
-MIN_SECONDS_PER_REQUEST = 1.05  # free-tier limit is 1 request/second
 
 
 def api_key() -> str:
@@ -113,8 +112,45 @@ def chat(messages: list[dict], key: str, max_retries: int = 6) -> dict:
             raise
 
 
-def run_split(split: str, mode: str, limit: int | None = None, data_dir: str = "data") -> Path:
+def _one_scene(record: dict, mode: str, shots: list[dict], key: str) -> dict:
+    messages = build_messages(record, mode, shots)
+    resp = chat(messages, key)
+    text = resp["choices"][0]["message"]["content"]
+    reprompted = False
+    if parse_diagnosis(text) is None:
+        # Fairness protocol: exactly one re-prompt on invalid JSON.
+        retry_messages = messages + [
+            {"role": "assistant", "content": text},
+            {
+                "role": "user",
+                "content": "Your answer did not contain one valid JSON object in the required schema. Answer again, ending with exactly one valid JSON object.",
+            },
+        ]
+        resp = chat(retry_messages, key)
+        text = resp["choices"][0]["message"]["content"]
+        reprompted = True
+    return {
+        "scene_id": record["scene_id"],
+        "cell_id": record["cell_id"],
+        "mode": mode,
+        "model": resp.get("model", MODEL),
+        "reprompted": reprompted,
+        "text": text,
+        "usage": resp.get("usage", {}),
+    }
+
+
+def run_split(
+    split: str,
+    mode: str,
+    limit: int | None = None,
+    data_dir: str = "data",
+    workers: int = 3,
+) -> Path:
     assert mode in ("zero", "few")
+    import concurrent.futures
+    import threading
+
     key = api_key()
     shots = few_shot_turns(data_dir) if mode == "few" else []
     out = Path("runs") / f"{split}-{mode}.jsonl"
@@ -123,53 +159,23 @@ def run_split(split: str, mode: str, limit: int | None = None, data_dir: str = "
     if out.exists():
         done = {json.loads(line)["scene_id"] for line in out.open()}
 
-    records = load_split(split, data_dir)
+    records = [r for r in load_split(split, data_dir) if r["scene_id"] not in done]
     if limit:
         records = records[:limit]
-    total_in = total_out = 0
-    with out.open("a") as f:
-        for i, record in enumerate(records):
-            if record["scene_id"] in done:
-                continue
-            t0 = time.time()
-            messages = build_messages(record, mode, shots)
-            resp = chat(messages, key)
-            text = resp["choices"][0]["message"]["content"]
-            reprompted = False
-            if parse_diagnosis(text) is None:
-                # Fairness protocol: exactly one re-prompt on invalid JSON.
-                retry_messages = messages + [
-                    {"role": "assistant", "content": text},
-                    {
-                        "role": "user",
-                        "content": "Your answer did not contain one valid JSON object in the required schema. Answer again, ending with exactly one valid JSON object.",
-                    },
-                ]
-                time.sleep(MIN_SECONDS_PER_REQUEST)
-                resp = chat(retry_messages, key)
-                text = resp["choices"][0]["message"]["content"]
-                reprompted = True
-            usage = resp.get("usage", {})
-            total_in += usage.get("prompt_tokens", 0)
-            total_out += usage.get("completion_tokens", 0)
-            f.write(
-                json.dumps(
-                    {
-                        "scene_id": record["scene_id"],
-                        "cell_id": record["cell_id"],
-                        "mode": mode,
-                        "model": resp.get("model", MODEL),
-                        "reprompted": reprompted,
-                        "text": text,
-                        "usage": usage,
-                    }
-                )
-                + "\n"
-            )
-            f.flush()
-            if (i + 1) % 25 == 0:
-                print(f"{split}-{mode}: {i + 1}/{len(records)}", flush=True)
-            time.sleep(max(0.0, MIN_SECONDS_PER_REQUEST - (time.time() - t0)))
+    total_in = total_out = n_done = 0
+    lock = threading.Lock()
+    with out.open("a") as f, concurrent.futures.ThreadPoolExecutor(workers) as pool:
+        futures = [pool.submit(_one_scene, r, mode, shots, key) for r in records]
+        for fut in concurrent.futures.as_completed(futures):
+            row = fut.result()
+            with lock:
+                f.write(json.dumps(row) + "\n")
+                f.flush()
+                total_in += row["usage"].get("prompt_tokens", 0)
+                total_out += row["usage"].get("completion_tokens", 0)
+                n_done += 1
+                if n_done % 25 == 0:
+                    print(f"{split}-{mode}: {n_done}/{len(records)}", flush=True)
     print(f"{split}-{mode} done: tokens in={total_in} out={total_out}", flush=True)
     return out
 
