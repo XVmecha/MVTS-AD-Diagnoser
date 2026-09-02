@@ -160,6 +160,13 @@ def run_split(
         done = {json.loads(line)["scene_id"] for line in out.open()}
 
     records = [r for r in load_split(split, data_dir) if r["scene_id"] not in done]
+    # Deterministic shuffle of PROCESSING order only (results are per-scene and
+    # order-independent): the split file is grid-ordered, so without this an
+    # interim prefix would cover only the first cells; shuffled, any prefix is
+    # approximately stratified and can be scored for an early saturation check.
+    import numpy as np
+
+    records = [records[i] for i in np.random.default_rng(0).permutation(len(records))]
     if limit:
         records = records[:limit]
     total_in = total_out = n_done = 0
