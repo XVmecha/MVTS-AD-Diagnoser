@@ -3,6 +3,28 @@
 Newest entries first. Design rationale lives in `docs/design.md`; this log records
 implementation decisions, workarounds, and operational steps taken along the way.
 
+## 2026-09-02 — Week-2 gate run launched (Mistral Large 3)
+
+**What.** Full eval run (1000 scenes x zero-shot + few-shot, 3 worker threads) launched
+against `mistral-large-latest` on La Plateforme, pay-as-you-go. Baseline prompt amended
+to v2 and re-frozen before any eval scene ran. Gate scorer `mvtsad/report.py` written
+(per-cell and per-class failure-curve tables). Outputs land in `runs/eval-{zero,few}.jsonl`,
+scored via `python -m mvtsad.report runs/eval-zero.jsonl runs/eval-few.jsonl`.
+
+**Why.** The gate (design section 12) decides whether difficulty dials need turning
+before any training.
+
+**Gotcha.** Four operational lessons. (1) Mistral free tier does NOT include Large 3
+(403 tier_not_allowed), and depositing credits does not switch the plan; the workspace
+must be flipped to pay-as-you-go in the console. (2) Prompt v1 made the model write the
+half-open notation "[99, 790)" inside JSON arrays, killing every parse; v2 adds one
+sentence requiring plain two-integer arrays. Freeze protocol intact: amendment predates
+all eval results, documented in prompts/baseline_system.md. (3) Measured tokens
+(~3.5k in / up to 1.4k out zero-shot; ~7k in few-shot) put the run near EUR 7, double
+the estimate, because the model over-claims (13-14 claims on single-fault scenes) and
+the few-shot gold examples are long. (4) Early smoke signal, not to be acted on:
+zero-shot over-claims, few-shot under-claims (0 claims on a faulted scene).
+
 ## 2026-09-01 — Dataset assembly and gold rendering
 
 **What.** `mvtsad/dataset.py`: 27-cell grid (SNR x depth x regime {none, switch,
