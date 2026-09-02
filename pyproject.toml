@@ -13,6 +13,9 @@ dependencies = [
 dev = [
     "pytest>=8",
 ]
+train = [
+    "mlx-lm>=0.31",
+]
 
 [build-system]
 requires = ["hatchling"]
