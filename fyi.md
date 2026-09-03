@@ -3,6 +3,32 @@
 Newest entries first. Design rationale lives in `docs/design.md`; this log records
 implementation decisions, workarounds, and operational steps taken along the way.
 
+## 2026-09-03 — Gate verdict (interim, 403 scenes): frontier struggles; SFT launched
+
+**What.** Interim scoring of the zero-shot Mistral Large run at 403/1000 scenes (order
+now shuffled, so the prefix is roughly stratified): strict claim accuracy 1.1%
+(16/1523 claims), event recall 0.31 with a clean SNR gradient (0.18 low / 0.28 med /
+0.51 high), grounded-but-wrong 3.45/scene, true hallucination ~0 (grounding 0.95),
+false alarms on 61/61 clean scenes, parse-fail 0.25% after the one allowed re-prompt
+(37% needed it). Field-level breakdown of the 134 matched claims: class wrong 58%,
+magnitude 34%, role 31%, attribution 24%. Decision per section 12: no dial-turning,
+eval set stands, run continues to completion for the full curve. SFT unblocked and
+launched: mlx_lm lora on Qwen3-4B-Instruct-2507-4bit, batch 1, grad-checkpoint,
+16 layers, max-seq 3072, 6100 iters (~2.5 epochs, ~8.5h at 0.2 it/s), adapter to
+adapters/qwen3-4b-sft-v1.
+
+**Why.** The gate exists to catch saturation; 1.1% strict accuracy at 40% of eval
+cannot reach saturation on the remainder, so training compute is safe to spend.
+
+**Gotcha.** (1) mlx_lm truncates sequences over max-seq-length SILENTLY except for a
+warning, and truncation eats the END of the sample, which is where the gold JSON
+lives; max-seq 2048 would have corrupted a handful of long samples. Raised to 3072.
+(2) batch 4 x seq 2048 OOMed Metal despite 48GB (peak at batch 1 is only 6GB;
+unified memory was shared with other workloads); batch 1 + grad-checkpoint is the
+reliable config. (3) The baseline runner needed hardening mid-run: retry on all
+OSError/HTTPException (a ConnectionResetError killed the pool at scene 186), and
+per-scene failures must not propagate out of the worker pool.
+
 ## 2026-09-02 — Week-2 gate run launched (Mistral Large 3)
 
 **What.** Full eval run (1000 scenes x zero-shot + few-shot, 3 worker threads) launched
