@@ -17,6 +17,7 @@ scene_ids are skipped on restart.
 
 from __future__ import annotations
 
+import http.client
 import json
 import sys
 import time
@@ -105,7 +106,8 @@ def chat(messages: list[dict], key: str, max_retries: int = 6) -> dict:
                 time.sleep(float(retry_after) if retry_after else min(60.0, 2.0**attempt * 2))
                 continue
             raise RuntimeError(f"API error {e.code}: {e.read().decode()[:500]}") from e
-        except (urllib.error.URLError, TimeoutError):
+        except (OSError, http.client.HTTPException):
+            # Covers URLError, timeouts, connection resets, bad status lines.
             if attempt < max_retries - 1:
                 time.sleep(min(60.0, 2.0**attempt * 2))
                 continue
@@ -174,7 +176,12 @@ def run_split(
     with out.open("a") as f, concurrent.futures.ThreadPoolExecutor(workers) as pool:
         futures = [pool.submit(_one_scene, r, mode, shots, key) for r in records]
         for fut in concurrent.futures.as_completed(futures):
-            row = fut.result()
+            try:
+                row = fut.result()
+            except Exception as e:
+                # One scene must not kill the pool; resume re-runs it later.
+                print(f"scene failed after retries: {e}", flush=True)
+                continue
             with lock:
                 f.write(json.dumps(row) + "\n")
                 f.flush()
