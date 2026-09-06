@@ -3,6 +3,27 @@
 Newest entries first. Design rationale lives in `docs/design.md`; this log records
 implementation decisions, workarounds, and operational steps taken along the way.
 
+## 2026-09-06 — SFT v1 results: beats the frontier baseline, with caveats
+
+**What.** Full eval of the SFT adapter (Qwen3-4B, 6100 iters, final val loss 0.197):
+strict claim accuracy 3.4% vs Mistral Large 1.0% (zero) / 1.8% (few); recall 0.33 vs
+0.32/0.29; parse-fail 0% and reprompt 0.4% vs 40% reprompt for the frontier. Same SNR
+and per-class gradients as the baseline (variance_change and level_shift strongest,
+spike zero, relational classes weak). Caveats, reported honestly: grounding rate
+dropped to 0.70 (frontier 0.95) with 0.62 "hallucinated" claims/scene, and clean-scene
+false alarms stayed high (177/190 vs frontier zero-shot 186/189, few-shot 141/190).
+Table archived at results/qwen3-4b-sft-v1.md.
+
+**Why.** The applied thesis row: a locally trained 4B vs the prompted frontier model.
+
+**Gotcha.** The 0.62/scene "hallucinated" figure is NOT fabrication: only 40 citations
+in the whole run are invented id strings, and nearly all are one-character near-misses
+(thr:s12@827 for thr:s11@827). The rest cite REAL evidence items that fail the
+pertinence rule (wrong channel/window for the claim), i.e. citation discipline. This
+is the natural GRPO target (grounding term already in the reward), alongside
+clean-scene restraint. Also: the eval killed over the weekend (machine sleep) after
+finishing the SFT row; base-model row resumed after. Consider caffeinate for long runs.
+
 ## 2026-09-03 — Gate verdict (interim, 403 scenes): frontier struggles; SFT launched
 
 **What.** Interim scoring of the zero-shot Mistral Large run at 403/1000 scenes (order
